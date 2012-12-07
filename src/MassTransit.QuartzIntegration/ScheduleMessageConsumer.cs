@@ -52,19 +52,20 @@ namespace MassTransit.QuartzIntegration
                 body = Encoding.UTF8.GetString(ms.ToArray());
             }
 
-            if (string.Compare(context.ContentType, "application/vnd.masstransit+json",
-                StringComparison.OrdinalIgnoreCase)
-                == 0)
-                body = TranslateJsonBody(body, context.Message.Destination.ToString());
-            else if (string.Compare(context.ContentType, "application/vnd.masstransit+xml",
-                StringComparison.OrdinalIgnoreCase) == 0)
-                body = TranslateXmlBody(body, context.Message.Destination.ToString());
-            else
-                throw new InvalidOperationException("Only JSON and XML messages can be scheduled");
+            IJobDetail jobDetail = JobBuilder.Create<MessagePublishJob>()
+                                             .RequestRecovery(true)
+                                             .WithIdentity(context.Message.CorrelationId.ToString("N"))
+                                             .UsingJobData("body", body)
+                                             .UsingJobData("sourceAddress", context.SourceAddress.ToString())
+                                             .UsingJobData("faultAddress", (context.FaultAddress ?? context.SourceAddress).ToString())
+                                             .StoreDurably(true)
+                                             .Build();
 
             IJobDetail jobDetail = JobBuilder.Create<ScheduledMessageJob>()
-                .RequestRecovery(true)
-                .WithIdentity(context.Message.CorrelationId.ToString("N"))
+                .UsingJobData("body", body)
+                .UsingJobData("sourceAddress", context.SourceAddress.ToString())
+                .UsingJobData("faultAddress", (context.FaultAddress ?? context.SourceAddress).ToString())
+                .Build();
                 .UsingJobData("Destination", ToString(context.Message.Destination))
                 .UsingJobData("ResponseAddress", ToString(context.ResponseAddress))
                 .UsingJobData("FaultAddress", ToString(context.FaultAddress))
